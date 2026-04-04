@@ -1,0 +1,18 @@
+# Конфиг с секретами
+config.yaml
+
+# Базы данных
+data/*.db
+data/*.sqlite
+data/logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
