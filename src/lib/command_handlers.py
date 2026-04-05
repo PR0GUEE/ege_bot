@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_by_num, add_task_to_blacklist, clear_blacklist, get_task_by_id
+from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_to_solve, add_task_to_blacklist, clear_blacklist, get_task_by_id
 from lib.keyboards import tasks_menu_keyboard, back_to_main_keyboard, solve_part_keyboard, back_to_tasks_menu_keyboard, solve_part2_keyboard
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,7 +29,9 @@ async def handle_task_number_input(update: Update, context: ContextTypes.DEFAULT
     if text.isdigit():
         num = int(text)
         if 1 <= num <= 25:
-            task = get_task_by_num(num)
+            user_data = get_user(user_id)
+            blacklist = user_data.get('blacklist', [])
+            task = get_task_to_solve([num], blacklist)
             if task:
                 update_user_current_task(user_id, task['id'])
                 context.user_data['current_task'] = task

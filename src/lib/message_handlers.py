@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_by_id, get_task_by_num, add_task_to_blacklist, clear_blacklist
+from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_by_id, get_task_to_solve, add_task_to_blacklist, clear_blacklist
 from lib.keyboards import back_to_main_keyboard, main_menu_keyboard, tasks_menu_keyboard, back_to_tasks_menu_keyboard, solve_part_keyboard, solve_part2_keyboard, feedback_keyboard, rating_keyboard, add_to_blacklist_keyboard
 from lib.database import get_task_criteria
 from lib.deepseek_client import check_task_with_deepseek
@@ -188,16 +188,17 @@ async def start_solve(update: Update, context: ContextTypes.DEFAULT_TYPE, part: 
     blacklist = get_user(user_id).get('blacklist', [])
     
     if part == 1:
-        num_range = range(1, 17)
+        task_pool = list(range(1, 17))
     else:
-        num_range = range(17, 26)
-    
-    task = None
-    for num in num_range:
-        if num not in blacklist:
-            task = get_task_by_num(num)
-            if task:
-                break
+        task_pool = list(range(17, 26))
+
+    task = get_task_to_solve(task_pool, blacklist)   # blacklist теперь список id
+    if task is None:
+        await query.edit_message_text(
+            "😔 К сожалению, задача не нашлась. Возможно, стоит очистить черный список.",
+            reply_markup=back_to_tasks_menu_keyboard()
+        )
+        return
     
     if task:
         update_user_current_task(user_id, task['id'])
