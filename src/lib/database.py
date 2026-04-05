@@ -1,6 +1,77 @@
+import random
 import sqlite3
 import json
-import random
+
+def get_task_to_solve(task_pool: list[int], banned: list[int], user_id: int):
+    """
+    Выбирает случайную задачу, у которой num в task_pool, id не в banned,
+    и user_id = NULL (общая) или user_id == текущий пользователь.
+    """
+    conn = sqlite3.connect('data/tasks.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    placeholders_num = ','.join('?' for _ in task_pool)
+    if banned:
+        placeholders_banned = ','.join('?' for _ in banned)
+        query = f'''
+            SELECT * FROM tasks 
+            WHERE num IN ({placeholders_num}) 
+              AND id NOT IN ({placeholders_banned})
+              AND (user_id IS NULL OR user_id = ?)
+        '''
+        params = task_pool + banned + [user_id]
+    else:
+        query = f'''
+            SELECT * FROM tasks 
+            WHERE num IN ({placeholders_num})
+              AND (user_id IS NULL OR user_id = ?)
+        '''
+        params = task_pool + [user_id]
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    if rows:
+        chosen = random.choice(rows)
+        return dict(chosen)
+    return None
+
+def add_task(num: int, condition: str, response_evaluation: str, user_id: int = None):
+    """
+    Добавляет задачу в основную таблицу tasks.db.
+    Если user_id не указан, задача общая (user_id = NULL).
+    """
+    conn = sqlite3.connect('data/tasks.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO tasks (num, condition, response_evaluation, user_id, grade, num_grades)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (num, condition, response_evaluation, user_id, 0.0, 0))
+    conn.commit()
+    task_id = cursor.lastrowid
+    conn.close()
+    return task_id
+
+def add_task_for_moderation(num: int, condition: str, response_evaluation: str, user_id: int):
+    """
+    Добавляет задачу в таблицу модерации query.db (структура как у tasks.db, но без рейтингов).
+    """
+    conn = sqlite3.connect('data/query.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS moderation_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            num INTEGER,
+            condition TEXT,
+            response_evaluation TEXT,
+            user_id INTEGER
+        )
+    ''')
+    cursor.execute('''
+        INSERT INTO moderation_tasks (num, condition, response_evaluation, user_id)
+        VALUES (?, ?, ?, ?)
+    ''', (num, condition, response_evaluation, user_id))
+    conn.commit()
+    conn.close()
 
 def get_user(user_id):
     """
@@ -56,36 +127,6 @@ def get_task_by_id(task_id):
     conn.close()
     return dict(row) if row else None
 
-def get_task_to_solve(task_pool: list[int], banned: list[int]):
-    """
-    Выбирает случайную задачу, у которой num в task_pool и id не в banned.
-    Возвращает словарь задачи или None.
-    """
-    conn = sqlite3.connect('data/tasks.db')
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    # Формируем запрос: num в заданном списке, id не в banned
-    placeholders_num = ','.join('?' for _ in task_pool)
-    if banned:
-        placeholders_banned = ','.join('?' for _ in banned)
-        query = f'''
-            SELECT * FROM tasks 
-            WHERE num IN ({placeholders_num}) AND id NOT IN ({placeholders_banned})
-        '''
-        params = task_pool + banned
-    else:
-        query = f'''
-            SELECT * FROM tasks 
-            WHERE num IN ({placeholders_num})
-        '''
-        params = task_pool
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    if rows:
-        chosen = random.choice(rows)
-        return dict(chosen)
-    return None
 
 def add_task_to_blacklist(user_id, task_id):
     """Добавляет task_id в черный список пользователя (JSON)."""
@@ -131,11 +172,10 @@ def update_task_rating(task_id, new_rating):
     conn.commit()
     conn.close()
 
-def get_task_criteria(task_id):
-    import sqlite3
+def get_task_response_evaluation(task_id):
     conn = sqlite3.connect('data/tasks.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT criteria FROM tasks WHERE id = ?", (task_id,))
+    cursor.execute("SELECT response_evaluation FROM tasks WHERE id = ?", (task_id,))
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else None

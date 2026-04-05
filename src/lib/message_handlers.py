@@ -2,8 +2,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_by_id, get_task_to_solve, add_task_to_blacklist, clear_blacklist
 from lib.keyboards import back_to_main_keyboard, main_menu_keyboard, tasks_menu_keyboard, back_to_tasks_menu_keyboard, solve_part_keyboard, solve_part2_keyboard, feedback_keyboard, rating_keyboard, add_to_blacklist_keyboard
-from lib.database import get_task_criteria
+from lib.database import get_task_response_evaluation
 from lib.deepseek_client import check_task_with_deepseek
+from lib.keyboards import add_task_menu, start_task_wizard, submit_task_wizard
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -147,7 +148,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Ошибка: задача не найдена.", reply_markup=tasks_menu_keyboard())
             return
         
-        criteria = get_task_criteria(task['id'])  # нужно реализовать эту функцию
+        criteria = get_task_response_evaluation(task['id'])  
         
         try:
             result = check_task_with_deepseek(task['condition'], criteria, collected)
@@ -174,6 +175,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пожалуйста, оцените задачу от 1 до 5, нажав на кнопку ниже.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭐ Оценить", callback_data="submit_feedback")]])
         )
+    elif data == "add_task":
+        await add_task_menu(update, context)   # вызываем новую функцию
+
+    elif data == "add_task_global":
+        await start_task_wizard(update, context, task_type='global')
+
+    elif data == "add_task_private":
+        await start_task_wizard(update, context, task_type='private')
+
+    elif data == "submit_wizard":
+        await submit_task_wizard(update, context)
+
+    elif data == "cancel_wizard":
+        context.user_data.pop('task_wizard', None)
+        await query.edit_message_text("Добавление задачи отменено.", reply_markup=back_to_main_keyboard())
 
 async def show_tasks_menu(query):
     await query.edit_message_text(
@@ -192,7 +208,7 @@ async def start_solve(update: Update, context: ContextTypes.DEFAULT_TYPE, part: 
     else:
         task_pool = list(range(17, 26))
 
-    task = get_task_to_solve(task_pool, blacklist)   # blacklist теперь список id
+    task = get_task_to_solve(task_pool, blacklist, user_id=query.from_user.id)
     if task is None:
         await query.edit_message_text(
             "😔 К сожалению, задача не нашлась. Возможно, стоит очистить черный список.",
@@ -238,7 +254,7 @@ async def handle_part1_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     answer = update.message.text.strip().lower()
-    correct_answer = task['answer'].lower()
+    correct_answer = task['response_evaluation'].lower()
     
     if task['num'] in [6,13,15]:
         # Точное сравнение

@@ -60,3 +60,10 @@ def add_to_blacklist_keyboard():
         [InlineKeyboardButton("❌ Нет", callback_data="add_to_blacklist_no")]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+def submit_cancel_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("✅ Готово", callback_data="submit_wizard")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_wizard")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
