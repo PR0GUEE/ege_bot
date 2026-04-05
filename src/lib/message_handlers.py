@@ -2,6 +2,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from lib.database import get_user, update_user_current_task, clear_user_current_task, get_task_by_id, get_task_by_num, add_task_to_blacklist, clear_blacklist
 from lib.keyboards import back_to_main_keyboard, main_menu_keyboard, tasks_menu_keyboard, back_to_tasks_menu_keyboard, solve_part_keyboard, solve_part2_keyboard, feedback_keyboard, rating_keyboard, add_to_blacklist_keyboard
+from lib.database import get_task_criteria
+from lib.deepseek_client import check_task_with_deepseek
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -135,7 +137,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('current_task_id', None)
         context.user_data.pop('solving_part', None)
     elif data == "send_answer":
-        # Отправка собранного ответа для 2 части
         user_id = query.from_user.id
         collected = context.user_data.get('collected_answer', '')
         if not collected.strip():
@@ -146,18 +147,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Ошибка: задача не найдена.", reply_markup=tasks_menu_keyboard())
             return
         
-        # Заглушка проверки через нейросеть (позже заменим)
-        verdict = f"✅ Ваш ответ: {collected}\n(проверка через нейросеть будет добавлена позже)"
+        criteria = get_task_criteria(task['id'])  # нужно реализовать эту функцию
+        
+        try:
+            result = check_task_with_deepseek(task['condition'], criteria, collected)
+            if result is None:
+                await query.edit_message_text(
+                    "❌ Не удалось проверить задачу с помощью нейросети. Попробуйте позже.\n\nВозвращаемся в меню.",
+                    reply_markup=tasks_menu_keyboard()
+                )
+                # очищаем состояние
+                clear_user_current_task(user_id)
+                context.user_data.pop('current_task', None)
+                return
+            verdict = f"🎯 *Результат проверки:* {result['score']} баллов\n\n💬 *Комментарий:* {result['comment']}"
+        except Exception as e:
+            verdict = f"⚠️ Ошибка при проверке: {str(e)}\nОтвет сохранён, проверка будет позже."
         
         await query.edit_message_text(
             f"{verdict}\n\nПереходим к оценке задачи.",
             reply_markup=feedback_keyboard()
         )
         context.user_data.pop('collected_answer', None)
-        # Показываем меню обратной связи (кнопки "вернуться к задаче" и "в меню")
-        # Оценка будет после нажатия "submit_feedback" (или сразу предложить?)
-        # По ТЗ: после вердикта сразу меню обратной связи с просьбой оценить.
-        # Сделаем так: после вердикта отправляем сообщение с кнопкой "Оценить задачу"
+        # Показываем кнопку для оценки
         await query.message.reply_text(
             "Пожалуйста, оцените задачу от 1 до 5, нажав на кнопку ниже.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭐ Оценить", callback_data="submit_feedback")]])
