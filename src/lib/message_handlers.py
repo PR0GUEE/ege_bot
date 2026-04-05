@@ -4,10 +4,12 @@ from lib.database import get_user, update_user_current_task, clear_user_current_
 from lib.keyboards import back_to_main_keyboard, main_menu_keyboard, tasks_menu_keyboard, back_to_tasks_menu_keyboard, solve_part_keyboard, solve_part2_keyboard, feedback_keyboard, rating_keyboard, add_to_blacklist_keyboard
 from lib.database import get_task_response_evaluation
 from lib.deepseek_client import check_task_with_deepseek
-from lib.keyboards import add_task_menu, start_task_wizard, submit_task_wizard
+from lib.command_handlers import add_task_menu, start_task_wizard, submit_task_wizard
+from lib.utils import require_subscription
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    user_id = query.from_user.id
     await query.answer()
     data = query.data
     
@@ -21,6 +23,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_main_keyboard()
         )
     elif data == "tasks":
+        if not await require_subscription(user_id, update, context, query):
+            return
         await show_tasks_menu(query)
     elif data == "monetization":
         await query.edit_message_text(
@@ -30,12 +34,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_main_keyboard()
         )
     elif data == "add_task":
-        await query.edit_message_text(
-            "➕ *Добавление задачи*\n\n"
-            "Раздел в разработке.",
-            parse_mode="Markdown",
-            reply_markup=back_to_main_keyboard()
-        )
+        if not await require_subscription(user_id, update, context, query):
+            return
+        await add_task_menu(update, context)   # вызываем новую функцию
+
+    elif data == "add_task_global":
+        if not await require_subscription(user_id, update, context, query):
+            return
+        await start_task_wizard(update, context, task_type='global')
+
+    elif data == "add_task_private":
+        if not await require_subscription(user_id, update, context, query):
+            return
+        await start_task_wizard(update, context, task_type='private')
+
+    elif data == "submit_wizard":
+        await submit_task_wizard(update, context)
+
+    elif data == "cancel_wizard":
+        context.user_data.pop('task_wizard', None)
+        await query.edit_message_text("Добавление задачи отменено.", reply_markup=back_to_main_keyboard())
     elif data == "main_menu":
         await query.edit_message_text(
             "Добро пожаловать в бот для подготовки к ЕГЭ по обществознанию!\n\n"
@@ -45,10 +63,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "back_to_tasks_menu":
         await show_tasks_menu(query)
     elif data == "solve_part1":
+        if not await require_subscription(user_id, update, context, query):
+            return
         await start_solve(update, context, part=1)
     elif data == "solve_part2":
+        if not await require_subscription(user_id, update, context, query):
+            return
         await start_solve(update, context, part=2)
     elif data == "solve_specific":
+        if not await require_subscription(user_id, update, context, query):
+            return
         context.user_data['awaiting_task_number'] = True
         await query.edit_message_text(
             "🔢 Введите номер задачи (от 1 до 25):\n\n"
@@ -175,21 +199,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пожалуйста, оцените задачу от 1 до 5, нажав на кнопку ниже.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭐ Оценить", callback_data="submit_feedback")]])
         )
-    elif data == "add_task":
-        await add_task_menu(update, context)   # вызываем новую функцию
-
-    elif data == "add_task_global":
-        await start_task_wizard(update, context, task_type='global')
-
-    elif data == "add_task_private":
-        await start_task_wizard(update, context, task_type='private')
-
-    elif data == "submit_wizard":
-        await submit_task_wizard(update, context)
-
-    elif data == "cancel_wizard":
-        context.user_data.pop('task_wizard', None)
-        await query.edit_message_text("Добавление задачи отменено.", reply_markup=back_to_main_keyboard())
 
 async def show_tasks_menu(query):
     await query.edit_message_text(

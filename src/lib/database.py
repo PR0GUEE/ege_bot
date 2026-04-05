@@ -98,10 +98,10 @@ def get_user(user_id):
         cursor.execute('''
             INSERT INTO users (user_id, blacklist, current_task_id, subscription_status)
             VALUES (?, ?, ?, ?)
-        ''', (user_id, json.dumps([]), None, True))
+        ''', (user_id, json.dumps([]), None, False))
         conn.commit()
         conn.close()
-        return {'blacklist': [], 'current_task_id': None, 'subscription_status': True}
+        return {'blacklist': [], 'current_task_id': None, 'subscription_status': False}
 
 def update_user_current_task(user_id, task_id):
     conn = sqlite3.connect('data/users.db')
